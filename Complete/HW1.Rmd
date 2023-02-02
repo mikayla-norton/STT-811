@@ -1,0 +1,196 @@
+---
+title: "HW1"
+author: "Mikayla Norton"
+date: "2023-01-10"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load data
+library(sqldf)
+library(tidyverse)
+order_details <- read.csv("orders/order_details.csv")
+orders <- read.csv("orders/orders.csv")
+territories <- read.csv("orders/territories.csv")
+regions <- read.csv("orders/regions.csv")
+employee_territories <- read.csv("orders/employee_territories.csv")
+employees <- read.csv("orders/employees.csv")
+customers <- read.csv("orders/customers.csv")
+shippers <- read.csv("orders/shippers.csv")
+suppliers <- read.csv("orders/suppliers.csv")
+products <- read.csv("orders/products.csv")
+categories <- read.csv("orders/categories.csv")
+```
+
+
+# Problem 1
+Perform a sort of orders by employeeID, then by shipVia, and then by freight, for those orders by shipped to France.
+```{r}
+ordersFrance <- sqldf("SELECT *
+                      FROM orders
+                      WHERE shipCountry is 'France'
+                      ORDER BY employeeID, shipVia, freight")
+head(ordersFrance)
+```
+
+# Problem 2
+Which shipVia has the largest average cost?
+```{r}
+order_cost <- sqldf("SELECT order_details.*, unitPrice*quantity*(1-discount) AS cost 
+                       FROM order_details")
+```
+
+```{r}
+avgCost <- sqldf("SELECT shipVia, avg(cost) as AvgCost 
+                 FROM orders 
+                 INNER JOIN order_cost 
+                 WHERE orders.orderID = order_cost.orderID
+                 GROUP BY shipVia")
+maxAvgCost <- sqldf("SELECT shipVia, max(AvgCost)
+                    FROM avgCost")
+maxAvgCost
+```
+
+# Problem 3
+Which product category has the highest average UnitPrice? The Lowest?
+```{r}
+avgUnitPrice <- sqldf("SELECT CategoryID, avg(UnitPrice) as AvgUnitPrice
+                      FROM products
+                      GROUP BY CategoryID
+                      ORDER BY avg(UnitPrice)")
+```
+
+```{r}
+maxAvgPrice <- sqldf("SELECT CategoryID, max(AvgUnitPrice)
+                     FROM avgUnitPrice")
+
+minAvgPrice <- sqldf("SELECT CategoryID, min(AvgUnitPrice)
+                     FROM avgUnitPrice")
+maxAvgPrice
+minAvgPrice
+```
+
+# Problem 4
+Which products are supplied by a company in the United States?
+```{r}
+productUSA <- sqldf("SELECT DISTINCT ProductName 
+                     FROM products 
+                     INNER JOIN suppliers 
+                     WHERE products.SupplierID = suppliers.SupplierID 
+                     AND country='USA'")
+head(productUSA)
+```
+
+# Problem 5
+Which shipper is shipping the largest number of units of product? Answer in terms of units; you do not need to consider quantityPerUnit here.
+```{r}
+BigShipper <- sqldf("SELECT shipperID, sum(quantity) as UnitsShipped 
+                     FROM orders 
+                     INNER JOIN order_details 
+                     INNER JOIN shippers
+                     ON orders.orderID = order_details.orderID
+                     AND shippers.shipperID = orders.shipVia
+                     GROUP BY shipperID
+                     ORDER BY UnitsShipped DESC
+                     LIMIT 1")
+BigShipper
+```
+
+# Problem 6
+Which employee is tied to the most sales revenue? Give the name, not the code, along with the total revenue for the employee.
+```{r}
+maxEmployee <- sqldf("SELECT firstName, lastName, sum(unitPrice*quantity*(1-discount)) AS revenue 
+                     FROM orders 
+                     INNER JOIN order_details
+                     INNER JOIN employees
+                     ON orders.orderID = order_details.orderID
+                     AND orders.employeeID = employees.employeeID
+                     GROUP BY orders.employeeID
+                     ORDER BY revenue DESC
+                     LIMIT 1")
+maxEmployee
+```
+
+# Problem 7
+Find the total revenue for each product category.
+```{r}
+categorical_revenue <- sqldf("SELECT products.CategoryID, order_details.unitPrice*quantity*(1-discount) AS revenue 
+                       FROM order_details
+                       INNER JOIN products
+                       INNER JOIN categories
+                       ON order_details.productID = products.ProductID
+                       AND products.CategoryID = categories.categoryID
+                       GROUP BY products.CategoryID")
+
+head(categorical_revenue)
+```
+
+
+# Problem 8
+Consider the amount of revenue for each customer. If there were no discounts applied, which customer would see the largest increase in cost?
+```{r}
+CostInc <- sqldf("SELECT customerID, sum(unitPrice*quantity - unitPrice*quantity*(1-discount)) AS CostIncrease
+                       FROM order_details
+                       INNER JOIN orders
+                       WHERE order_details.orderID = orders.orderID
+                      GROUP BY customerID
+                      ORDER BY CostIncrease DESC
+                      LIMIT 1")
+CostInc
+```
+
+# Problem 9
+Which order(s) has the most number of items (and how many)? Give the orderID for this one.
+```{r}
+mostItems <- sqldf("SELECT orderID, sum(quantity) as totalItems
+                   FROM order_details
+                   GROUP BY orderID")
+mostItems <- sqldf("SELECT orderID, max(totalItems)
+                   FROM mostItems")
+mostItems
+```
+
+# Problem 10
+Create a new field called “InventoryOrderRatio” which is, for each product, the UnitsinStock (the inventory) for the product (across all customers) divided by the quantity ordered for that product. A high value represents sufficient product in stock, while a low number represents products that are in danger of running out. What 3 products are most in danger of running out?
+```{r}
+products2 <- sqldf("SELECT products.*, sum(quantity) as QuantityOrdered, UnitsinStock/sum(quantity) as InventoryOrderRatio
+                  FROM products
+                  INNER JOIN order_details
+                  WHERE products.ProductID = order_details.productID
+                  GROUP BY order_details.productID
+                  ORDER BY InventoryOrderRatio
+                  LIMIT 3")
+products2
+```
+
+# Problem 11
+A recommender engine looks at which pairs of products tend to be bought by the same customer, so that if a customer buys one, the recommender engine will recommend they buy the other. Find which product pairs are most likely to be bought by the same customer.
+```{r}
+library(sqldf)
+rec <- sqldf("SELECT products.ProductID, ProductName, customers.customerID
+             FROM products
+             INNER JOIN customers
+             INNER JOIN orders
+             INNER JOIN order_details
+             ON orders.orderID = order_details.orderID
+             AND orders.customerID = customers.customerID
+             AND order_details.ProductID = products.ProductID")
+
+
+productsCustomers <- sqldf("SELECT v1.ProductName as Product1, v2.ProductName as Product2, count(DISTINCT v1.customerID) as totalCustomers
+               FROM rec v1
+               INNER JOIN rec v2
+               ON v1.customerID = v2.customerID
+               WHERE
+                   v1.ProductID < v2.ProductID
+               GROUP BY
+                   v1.ProductName, v2.ProductName
+               ORDER BY totalCustomers DESC")
+head(productsCustomers)
+```

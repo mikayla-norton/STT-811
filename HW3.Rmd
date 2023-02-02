@@ -1,0 +1,166 @@
+---
+title: "HW 3"
+author: "Mikayla Norton"
+date: "2023-01-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("ggplot2")
+library("dplyr")
+library("corrplot")
+library(MASS)
+```
+
+# Problem 1 - ISLR2 4.6
+Suppose we collect data for a group of students in a statistics class with variables X1 = hours studied, X2 = undergrad GPA, and Y = receive an A. We fit a logistic regression and produce estimated coefficient, β0 = −6, β1 = 0.05, β2 = 1.
+
+## Part A
+Estimate the probability that a student who studies for 40 h and has an undergrad GPA of 3.5 gets an A in the class.
+```{r p1a}
+x1 = 40
+x2 = 3.5
+b0 = -6
+b1 = 0.05
+b2 = 1
+
+y <- 1/(1+exp(-(b0+b1*x1+b2*x2)))
+cat("The student's probability of receiving an A in the class is ", y)
+```
+
+## Part B
+How many hours would the student in part (a) need to study to have a 50 % chance of getting an A in the class?
+```{r p1b}
+y = 0.5
+x2 = 3.5
+b0 = -6
+b1 = 0.05
+b2 = 1
+x1 <- (log(1/y -1) + b0 + b2*x2)/(-b1)
+cat("To have a 50% of getting an A, the student would need to study", x1, "hours.")
+
+```
+
+# Problem 2 - ISLR2 4.9
+This problem has to do with odds.
+
+## Part A
+On average, what fraction of people with an odds of 0.37 of defaulting on their credit card payment will in fact default?
+```{r p2a}
+odds <- 0.37
+frac <- 37/137
+cat("The fraction of people that will default is", frac)
+```
+
+## Part B
+Suppose that an individual has a 16% chance of defaulting on her credit card payment. What are the odds that she will default?
+```{r p2b}
+p = 0.16
+odds <- p/(1-p)
+
+cat("The odds of that individual defaulting are", odds)
+```
+# Problem 3 - ISLR2 4.14
+In this problem, you will develop a model to predict whether a given car gets high or low gas mileage based on the Auto data set.
+
+## Part A
+Create a binary variable, mpg01, that contains a 1 if mpg contains a value above its median, and a 0 if mpg contains a value below its median. You can compute the median using the median() function. Note you may find it helpful to use the data.frame() function to create a single data set containing both mpg01 and the other Auto variables.
+```{r p3a}
+auto <- ISLR2::Auto
+auto$mpg01 <- auto$mpg
+med <- median(auto$mpg)
+auto$mpg01[auto$mpg01 >  med] <- 1
+auto$mpg01[auto$mpg01 != 1] <- 0
+```
+
+## Part B
+Explore the data graphically in order to investigate the association between mpg01 and the other features. Which of the other features seem most likely to be useful in predicting mpg01? Scatterplots and boxplots may be useful tools to answer this question. Describe your findings.
+``` {r p3b}
+auto_n <- auto[, c(2:8, 10)]
+corrplot(cor(auto_n), col=colorRampPalette(c("hotpink4","white","darkgreen"))(200))
+
+
+
+```
+``` {r}
+cylKDE<-kde2d(auto$cylinders, auto$mpg01)
+
+filled.contour(cylKDE,color.palette=colorRampPalette(c("white",'blue4',"darkviolet",'deeppink4','orange','yellow')), xlab="cylinders", ylab="mpg01", main="mpg01 vs cylinders")
+
+disKDE<-kde2d(auto$displacement, auto$mpg01)
+
+filled.contour(disKDE,color.palette=colorRampPalette(c("white",'blue4',"darkviolet",'deeppink4','orange','yellow')), xlab="displacement", ylab="mpg01", main="mpg01 vs displacement")
+
+horKDE<-kde2d(auto$horsepower, auto$mpg01)
+
+filled.contour(horKDE,color.palette=colorRampPalette(c("white",'blue4',"darkviolet",'deeppink4','orange','yellow')), xlab="horsepower", ylab="mpg01", main="mpg01 vs horsepower")
+
+weiKDE<-kde2d(auto$weight, auto$mpg01)
+
+filled.contour(weiKDE,color.palette=colorRampPalette(c("white",'blue4',"darkviolet",'deeppink4','orange','yellow')), xlab="weight", ylab="mpg01", main="mpg01 vs weight")
+
+
+accKDE<-kde2d(auto$acceleration, auto$mpg01)
+
+filled.contour(accKDE,color.palette=colorRampPalette(c("white",'blue4',"darkviolet",'deeppink4','orange','yellow')), xlab="acceleration", ylab="mpg01", main="mpg01 vs acceleration")
+
+
+yeaKDE<-kde2d(auto$year, auto$mpg01)
+
+filled.contour(yeaKDE,color.palette=colorRampPalette(c("white",'blue4',"darkviolet",'deeppink4','orange','yellow')), xlab="year", ylab="mpg01", main="mpg01 vs year")
+
+oriKDE<-kde2d(auto$origin, auto$mpg01)
+
+filled.contour(oriKDE,color.palette=colorRampPalette(c("white",'blue4',"darkviolet",'deeppink4','orange','yellow')), xlab="origin", ylab="mpg01", main="mpg01 vs origin")
+
+```
+
+Using the above Kernel-Density plots, the following trends appear to be present in distribution:
+
+- Cylinder: lower cylinders tend to have an mpg above the median, higher cylinders tend to have an mpg below the median.
+
+- Displacement: lower displacement has mpgs both above and below the median, with more above, higher displacement tends to have an mpg below the median.
+
+- Horsepower: lower horsepower has mpgs both above and below the median, with more above, higher horsepower tends to have an mpg below the median.
+
+- Weight: lower weight tend to have an mpg above the median, with a few below the median, higher weight tends to have an mpg below the median.
+
+- Acceleration and year have no clearly conclusive trends. More recent years may hold some correlation towards higher mpg but it is not consistent. Same to acceleration in positively correlated trends but no consistency.
+
+- Origin: Also not a super clear trend, origins of a value of "1" have both types of mpgs, origins with a "2" value also have both but have more above the median, origins with a value of "3" have values above the median. 
+
+## Part C
+Split the data into a training set and a test set.
+
+## Part D
+(ISLR2 part F) Perform logistic regression on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01 in (b). What is the test error of the model obtained?
+
+## Part E
+Use the parameters found in the logistic regression to compute the predictions directly for the test dataset. Compare to the output of the predict function.
+
+## Part F
+Create a confusion matrix for the train and test datasets. Does the model perform similarly between them? Be sure to explain.
+
+## Part G
+Compute confidence intervals for the parameters based on the z values.
+
+## Part H
+Compute bootstrapped confidence intervals for the parameters you found.
+
+## Part I
+Re-do the logistic regression with 2 numerical variables (no train-test split). Create a contour plot of the prediction results.
+
+
+
+# Problem 4
+For the customer churn dataset, consider the fields Age, Total_Purchase, Account_Manager, Years, and Num_Sites as possible X variables. Note that Account_Manager is a binary categorical variable.
+
+## Part A
+Create histograms to examine how each variable might predict churn.
+
+## Part B
+Split the data into train and test datasets.
+
+## Part C
+Fit a logistic regression model—first with all X’s, and then remove those X’s that are not statistically significant, one at a time. Create a confusion matrix for the final model for both the train and test datasets, and compare the results.

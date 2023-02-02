@@ -1,0 +1,195 @@
+---
+title: "ICAs"
+author: "Mikayla Norton"
+date: "2023-01-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r fileUpload}
+library(sqldf)
+library(tidyverse)
+order_details <- read.csv("orders/order_details.csv")
+orders <- read.csv("orders/orders.csv")
+territories <- read.csv("orders/territories.csv")
+regions <- read.csv("orders/regions.csv")
+employee_territories <- read.csv("orders/employee_territories.csv")
+employees <- read.csv("orders/employees.csv")
+customers <- read.csv("orders/customers.csv")
+shippers <- read.csv("orders/shippers.csv")
+suppliers <- read.csv("orders/suppliers.csv")
+products <- read.csv("orders/products.csv")
+categories <- read.csv("orders/categories.csv")
+
+
+customer_history <- read.csv("orders/Customer_History.csv")
+order_history <- read.csv("orders/Order_History.csv")
+oh_un <- read.csv("orders/ProductOrderUndated.csv")
+shipper_history <- read.csv("orders/Shipper_history.csv")
+shipping_history <- read.csv("orders/Shipping_history.csv")
+complaints <- read.csv("orders/Complaint_History.csv")
+```
+# completed
+```{r ica1}
+
+#1.
+low_ship <- sqldf("SELECT * from orders
+                  WHERE ShipVia = 1")
+#2.
+order_summary <- sqldf("SELECT productID, avg(unitPrice)
+                       FROM order_details
+                       GROUP BY productID")
+order_summary
+```
+```{r ica2}
+#1
+regionsTerritories <- sqldf("SELECT territories.*, regionDescription
+                            FROM regions
+                            INNER JOIN territories
+                            WHERE regions.regionID = territories.regionID")
+
+#2
+
+customerOrders <- sqldf("SELECT orderID, companyName, country
+                        FROM customers
+                        INNER JOIN orders
+                        ON customers.customerID = orders.customerID")
+
+#3
+customerDetails <- sqldf("SELECT order_details.*, companyName
+                         FROM order_details
+                         INNER JOIN customers
+                         INNER JOIN orders
+                         ON order_details.orderID = orders.orderID
+                         AND orders.customerID = customers.customerID")
+
+#4
+supplierShipper <- sqldf("SELECT *
+                         FROM shippers
+                         INNER JOIN suppliers")
+
+#5
+employeesToCustomers <- sqldf("SELECT companyName AS customerName, customers.country, firstName, lastName
+                              FROM customers
+                              INNER JOIN employees
+                              INNER JOIN orders
+                              ON orders.employeeID = employees.employeeID
+                              AND orders.customerID = customers.customerID")
+
+employeesToCustomers
+```
+```{r ica3}
+#1
+years <- data.frame(year = seq(2005,2022))
+
+
+customer_history2 <- sqldf("SELECT *
+               FROM customer_history
+               INNER JOIN years
+               WHERE year <= Last_Year 
+               AND year >= First_Year")
+
+
+#2
+order_history2 <- sqldf("SELECT CustomerID, Product_ID, Year, Month, sum(Quantity) as Quantity
+                        FROM order_history
+                        GROUP BY customerID")
+
+order_wide <- pivot_wider(order_history2, names_from = Year, values_from = Quantity)
+order_long <- pivot_longer(order_wide, cols = starts_with('20'), names_to = 'Year', values_to = 'Quantity',)
+order_long <- sqldf("SELECT *
+                    FROM order_long
+                    ORDER BY Year, Month, CustomerID, Product_ID")
+```
+```{r 1.19notes}
+# add extra year column to cust_hist
+years <- data.frame(year = seq(2005,2022))
+
+
+customer_history2 <- sqldf("SELECT *
+               FROM customer_history
+               INNER JOIN years
+               WHERE year <= Last_Year 
+               AND year >= First_Year")
+
+# summary of complaints
+complaintsSummary <- sqldf("SELECT *,COUNT(*) as ComplaintCount
+                           FROM complaints
+                           GROUP BY customerID, ComplaintYear
+                           ORDER BY ComplaintYear, customerID")
+
+#Individual Year Approach
+predictions <- sqldf("SELECT *, ComplaintYear+1 as PredictiveYear
+                     FROM complaintsSummary")
+
+ComplaintsCount <- sqldf("SELECT *, sum(ComplaintCount) as ComplaintHist
+                   FROM predictions
+                   GROUP BY PredictiveYear>ComplaintYear")
+
+#Aggregate Approach
+aggregateComplaints <- sqldf("SELECT t1.ComplaintYear, t2.ComplaintYear as PredictiveYear, COUNT(*)
+                             FROM complaints t1
+                             INNER JOIN complaints t2
+                             WHERE t2.ComplaintYear > t1.ComplaintYear
+                             AND t2.ComplaintYear <= t1.ComplaintYear+1
+                             GROUP BY t1.customerID, t1.ComplaintYear
+                             ORDER BY t1.ComplaintYear")
+```
+```{r ica4}
+
+complaintsSummary <- sqldf("SELECT *,COUNT(*) as ComplaintCount
+                           FROM complaints
+                           GROUP BY customerID, ComplaintYear
+                           ORDER BY ComplaintYear, customerID")
+
+predictions <- sqldf("SELECT *, ComplaintYear+1 as PredictiveYear
+                     FROM complaintsSummary")
+
+
+ComCount <- sqldf("SELECT CustomerID, PredictiveYear,
+                      SUM (SUM (ComplaintCount)) OVER (ORDER BY PredictiveYear) AS ComplaintHist
+                    FROM predictions
+                    GROUP BY CustomerID, PredictiveYear
+                    ORDER BY CustomerID, PredictiveYear")
+View(ComCount)
+```
+```{r ica5}
+salesRaw <- read.csv("sales_data.csv")
+
+
+sales <- sqldf("SELECT X, 
+               CASE WHEN units = 'kg' ")
+
+```
+```{r ica6}
+heart <- read.csv("Heart.csv")
+head(heart)
+```
+```{r ica7}
+heart <- read.csv("Heart.csv")
+library(caret)
+library(ggplot2)
+heart$y <- ifelse(heart$AHD=="Yes",1,0)
+
+heart_mod <- glm(data = heart, y ~ MaxHR + RestBP + as.factor(ChestPain), family = binomial)
+summary(heart_mod)
+
+b0 = 2.915699
+b1 = -0.032991
+b2 = 0.021750
+b3 = -2.010243
+x1 = 170
+x2 = 145
+y1 <- 1/(1+exp(-(b0+b1*x1+b2*x2+b3)))
+confusionMatrix(data = as.factor(as.integer(2*heart_mod$fitted.values)), reference = as.factor(heart$y))
+
+odds <- p/(1-p)
+odds
+```
+
+```{r ica8}
+
+```

@@ -1,0 +1,220 @@
+---
+title: "HW2"
+author: "Mikayla Norton"
+date: "2023-01-21"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sqldf)
+```
+
+# Problem 1
+The purpose of this problem is to create a modeling dataset for customer churn in the next year, based on the customer history dataset. In ICA 3, you performed the row augmentation to get missing rows added to the data. To get to the modeling dataset:
+
+## Part A
+Create the target field based on the strategy given in the slides.
+```{r p1a}
+customer_history <- read.csv("orders/Customer_History.csv")
+years <- data.frame(year = seq(2005,2022))
+
+customer_history2 <- sqldf("SELECT *
+               FROM customer_history
+               INNER JOIN years
+               WHERE year <= Last_Year 
+               AND year >= First_Year")
+head(customer_history2)
+```
+
+## Part B
+Create the following additional input variables that would be used to make predictions:
+i. Customer age
+```{r p1bi}
+customer_history2 <- sqldf("SELECT *, year-Year_born as Age
+               FROM customer_history2")
+
+head(customer_history2)
+```
+ii. Number of years as a customer
+```{r p1bii}
+customer_history2 <- sqldf("SELECT *, Last_Year-First_Year as Years_As_Cust
+               FROM customer_history2")
+head(customer_history2)
+```
+
+iii. Using the complaints dataset, create a count of complaints made each year and join it to the dataset (be careful with what year you join!)
+```{r p1biii}
+complaints <- read.csv("orders/Complaint_History.csv")
+
+complaintsSummary <- sqldf("SELECT CustomerID, ComplaintYear,COUNT(*) as ComplaintCount
+                           FROM complaints
+                           GROUP BY ComplaintYear, CustomerID
+                           ORDER BY ComplaintYear")
+
+Cust_Complaints <- sqldf("SELECT customer_history2.*,ComplaintCount
+                         FROM customer_history2
+                         LEFT JOIN complaintsSummary
+                         ON customer_history2.year = complaintsSummary.ComplaintYear 
+                         AND customer_history2.Customer=complaintsSummary.CustomerID")
+Cust_Complaints["ComplaintCount"][is.na(Cust_Complaints["ComplaintCount"])] <- 0
+
+head(Cust_Complaints)
+```
+
+
+# Problem 2
+The purpose of this problem is to create a modeling dataset for predicting which orders will order which products, based on the order history dataset. In ICA 3, you performed the row augmentation. Now:
+
+## Part A
+Create the target field based on the strategy given in the slides.
+```{r p2a}
+order_history <- read.csv("orders/Order_History.csv")
+order_history2 <- sqldf("SELECT CustomerID, Product_ID, Year, Month, sum(Quantity) as Quantity
+                        FROM order_history
+                        GROUP BY customerID, Product_ID, Year, Month
+                        ORDER BY CustomerID, Product_ID, Year, Month")
+
+order_wide <- pivot_wider(order_history2, names_from = Year, values_from = Quantity)
+order_long <- pivot_longer(order_wide, cols = starts_with('20'), names_to = 'Year', values_to = 'Quantity',)
+order_long <- sqldf("SELECT *
+                    FROM order_long
+                    ORDER BY  CustomerID, Product_ID, Year, Month")
+
+order_long["Quantity"][is.na(order_long["Quantity"])] <- 0
+order_long["Quantity"][order_long["Quantity"] != 0] <- 1
+
+order_long <- order_long %>% 
+       rename("OrderBinary" = "Quantity")
+
+head(order_long)
+```
+```{r p2-additional setup}
+year <- data.frame("year" = min(order_long$Year):max(order_long$Year))
+month <- data.frame("month" = min(order_long$Month):max(order_long$Month))
+cust <- data.frame("customer" = min(order_long$CustomerID):max(order_long$CustomerID))
+products <- data.frame("product" = min(order_long$Product_ID):max(order_long$Product_ID))
+
+cartesian_orders <- sqldf("SELECT *
+                   FROM year
+                   INNER JOIN month
+                   INNER JOIN cust
+                   INNER JOIN products")
+
+# order_summary <- sqldf("SELECT *, 
+#                     CASE WHEN Month = 1 THEN 12 ELSE Month-1 END AS PastMonth
+#                     FROM order_long
+#                     GROUP BY CustomerID, Year, Month")
+# 
+# order_summary <- sqldf("SELECT *,
+#                     CASE WHEN Month = 1 THEN Year-1 ELSE Year END AS PastYear
+#                     FROM order_summary
+#                     GROUP BY CustomerID, Year, Month")
+# head(order_summary)
+```
+
+
+## Part B
+Create the following additional input variables that would be used to make predictions. All of these x variables should be from the standpoint of the prior month.
+
+i. Number of months since the last order
+```{r p2bi}
+
+Order_summaries <- sqldf("SELECT customer, product, t1.year, t1.month, SUM(OrderBinary) as TotalOrders
+                         FROM cartesian_orders t1
+                         LEFT JOIN order_long t2
+                         ON t1.customer=t2.CustomerID 
+                         AND t1.product=t2.Product_ID 
+                         AND t1.year=t2.Year 
+                         AND t1.month=t2.Month
+                         GROUP BY customer, product, t1.year, t1.month")
+
+Order_summaries["TotalOrders"][is.na(Order_summaries["TotalOrders"])] <- 0
+
+#####
+
+
+Months_Since <- sqldf("SELECT t1.month, t1.year, t1.customer,t1.product, t1.TotalOrders, (t1.year*12+t1.month)-(t2.year*12+t2.month) as MonthsSinceLast
+                         FROM Order_summaries t1
+                         INNER JOIN Order_summaries t2
+                         ON t1.customer=t2.customer
+                         AND t1.product=t2.product
+                         WHERE t1.TotalOrders>0 AND t2.TotalOrders>0 AND MonthsSinceLast > 0 AND MonthsSinceLast <= 12")
+
+Months_Since_Last <- sqldf("SELECT customer, product, month, year, min(MonthsSinceLast) as MonthsSinceLast
+                         FROM Months_Since
+                         GROUP BY customer, product, year, month
+                         ORDER BY customer, product, year, month")
+head(Months_Since_Last)
+```
+
+ii. Number of months out of the previous 12 months that an order was placed
+```{r p2bii}
+Previous12 <- sqldf("SELECT customer, product, month, year, COUNT(MonthsSinceLast) as OrdersOverLastYear
+                    FROM Months_Since 
+                    GROUP BY customer, product, year, month
+                    ORDER BY customer, product, year, month")
+head(Previous12)
+```
+
+
+iii. Average quantity ordered per order (over last 12 years)
+```{r p2biii}
+
+Avg_Quantity <- sqldf("SELECT t1.Month, t1.Year, t1.CustomerID, t1.Product_ID, avg(t2.Quantity) as AvgQuantity,  (t1.year*12+t1.month)-(t2.year*12+t2.month) as MonthsSinceLast
+                         FROM order_history2 t1
+                         INNER JOIN order_history2 t2
+                         ON t1.CustomerID=t2.CustomerID
+                         AND t1.Product_ID=t2.Product_ID
+                         WHERE t1.Quantity>0 AND t2.Quantity>0 AND MonthsSinceLast >= 0 AND MonthsSinceLast <= 12
+                         GROUP BY t1.CustomerID, t1.Product_ID, t1.Year, t1.Month
+                         ORDER BY t1.CustomerID, t1.Product_ID, t1.Year, t1.Month")
+
+Avg_Quantity <- sqldf("SELECT CustomerID, Product_ID, Month, Year, AvgQuantity
+                      FROM Avg_Quantity
+                      ORDER BY CustomerID, Product_ID, Year, Month")
+head(Avg_Quantity)
+```
+
+
+# Problem 3
+With the OJ dataset, calculate some additional X’s and join them back to the original dataset; specifically:
+```{r p3}
+oj <- ISLR2::OJ
+head(oj)
+```
+## Part A
+The average price for each brand by store
+```{r p3a}
+ojAvgPrice <- sqldf("SELECT *, avg(PriceCH) as AvgPriceCH, avg(PriceMM) as AvgPriceMM
+             FROM oj
+             GROUP BY StoreID")
+head(ojAvgPrice)
+```
+
+## Part B
+The previous week’s fraction of customers who bought Minute Maid, by store (note: you will lose the first week when you use this as an X)
+```{r p3b}
+
+ojCustCounts <- sqldf("SELECT *, COUNT(*) as TotalPurchases, 
+                    COUNT(CASE WHEN Purchase = 'MM' THEN 1 ELSE NULL END) AS CountMM
+                    FROM oj
+                    GROUP BY WeekofPurchase")
+
+ojCustCounts$TotalPurchases <- as.double(ojCustCounts$TotalPurchases)
+ojCustCounts$CountMM <- as.double(ojCustCounts$CountMM)
+
+ojFrac <- sqldf("SELECT t1.*, (t2.CountMM)/(t2.TotalPurchases) as CustFrac
+                FROM ojCustCounts t1
+                INNER JOIN ojCustCounts t2
+                WHERE t1.WeekofPurchase = t2.WeekofPurchase+1")
+
+
+
+
+head(ojFrac)
+```
+
