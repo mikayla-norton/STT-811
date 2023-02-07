@@ -495,6 +495,29 @@ above the median.</p></li>
 <div id="part-c" class="section level2">
 <h2>Part C</h2>
 <p>Split the data into a training set and a test set.</p>
+<pre class="r"><code>library(caret)</code></pre>
+<pre><code>## Loading required package: lattice</code></pre>
+<pre class="r"><code>library(ggplot2)
+#cylinders, displacement, horsepower, weight
+split_pct &lt;- 0.6
+n &lt;- length(auto$mpg01)*split_pct # train size
+row_samp &lt;- sample(1:length(auto$mpg01), n, replace = FALSE)
+train &lt;- auto[row_samp,]
+test &lt;- auto[-row_samp,]
+auto_train_mod &lt;- glm(data = train, mpg01 ~ cylinders + displacement + horsepower + weight, family = binomial)
+test_pred &lt;- predict(auto_train_mod,test, type = &quot;response&quot;)
+train_cm &lt;- confusionMatrix(as.factor(as.integer(2*auto_train_mod$fitted.values)), reference = as.factor(train$mpg01))
+test_cm &lt;- confusionMatrix(as.factor(as.integer(2*test_pred)), reference = as.factor(test$mpg01))
+train_cm$table</code></pre>
+<pre><code>##           Reference
+## Prediction   0   1
+##          0 112   8
+##          1  10 105</code></pre>
+<pre class="r"><code>test_cm$table</code></pre>
+<pre><code>##           Reference
+## Prediction  0  1
+##          0 61  7
+##          1 13 76</code></pre>
 </div>
 <div id="part-d" class="section level2">
 <h2>Part D</h2>

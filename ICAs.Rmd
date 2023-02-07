@@ -191,5 +191,15 @@ odds
 ```
 
 ```{r ica8}
-
+split_pct <- 0.75
+n <- length(OJ$Purchase1)*split_pct # train size
+row_samp <- sample(1:length(OJ$Purchase1), n, replace = FALSE)
+train <- OJ[row_samp,]
+test <- OJ[-row_samp,]
+OJ_train_mod <- glm(data = train, Purchase1 ~ PriceDiff + LoyalCH, family = binomial)
+test_pred <- predict(OJ_train_mod,test, type = "response")
+train_cm <- confusionMatrix(as.factor(as.integer(2*OJ_train_mod$fitted.values)), reference = as.factor(train$Purchase1))
+test_cm <- confusionMatrix(as.factor(as.integer(2*test_pred)), reference = as.factor(test$Purchase1))
+train_cm$table
+test_cm$table
 ```
