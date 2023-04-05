@@ -1,0 +1,41 @@
+---
+title: "Experimental Project Churn"
+author: "Mikayla Norton"
+date: "2023-03-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+data <- read.csv("train.csv")
+data$Month <- match(data$Month, month.name)
+library(sqldf)
+```
+
+```{r}
+data2 <- sqldf("SELECT Customer_ID, Month, Credit_Score, Month-1 as PrevMonth
+               FROM data
+               ORDER BY Customer_ID")
+```
+
+```{r}
+d2 <- sqldf("SELECT Customer_ID, Month, Credit_Score, LAG(Credit_Score, 1) OVER (ORDER BY Customer_ID) as Lagged_Score
+            FROM data2")
+```
+
+```{r}
+count <- integer(length(unique(d2$Customer_ID)))
+for (i in 2:length(d2$Credit_Score)){
+  for (j in 1:length(unique(d2$Customer_ID))) {
+    if (d2$Customer_ID[i] == d2$Customer_ID[i-1]){
+      if (d2$Credit_Score[i] != d2$Credit_Score[i-1]) {
+        count[j] <- count[j]+1
+      }
+    }
+  }
+}
+```
+

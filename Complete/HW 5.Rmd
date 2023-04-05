@@ -1,0 +1,198 @@
+---
+title: "HW 5"
+author: "Mikayla Norton"
+date: "2023-03-01"
+output: html_document
+---
+
+```{r setup, include=FALSE, Emessage=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("ggplot2")
+library("dplyr")
+library("corrplot")
+library(MASS)
+library(caret)
+library(e1071)
+library(class)
+library(ISLR2)
+library(tree)
+```
+
+# Problem 1
+
+ISLR2 5.6: We continue to consider the use of a logistic regression model to predict the probability of default using income and balance on the Default data set. In particular, we will now compute estimates for the standard errors of the income and balance logistic regression coefficients in two different ways: (1) using the bootstrap, and (2) using the standard formula for computing the standard errors in the glm() function. Do not forget to set a random seed before beginning your analysis.
+
+## Part A
+
+Using the summary() and glm() functions, determine the estimated standard errors for the coefficients associated with income and balance in a multiple logistic regression model that uses both predictors.
+
+```{r p1a}
+default_data <- ISLR2::Default
+summary(glm(data = default_data, default ~ balance + income, family = binomial))
+```
+
+## Part B
+
+Write a function, boot.fn(),that takes as input the Default data set as well as an index of the observations, and that outputs the coefficient estimates for income and balance in the multiple logistic regression model.
+
+```{r p1b}
+split_pct <- 0.7
+n <- length(default_data$default)*split_pct # train size
+row_samp <- sample(1:length(default_data$default), n, replace = FALSE)
+boot.fn <- function(data=default_data, n=row_samp) {
+  train <- default_data[row_samp,]
+  boot.glm<-glm(data = train, default ~ income + balance, family = binomial)
+  return(boot.glm$coefficients)
+}
+```
+
+## Part C
+
+Estimate 95% confidence intervals for the parameters using (a) the output of the GLM summary and (b) bootstrapping.
+
+```{r p1c}
+income.coeff <- rep(0, 100)
+balance.coeff <- rep(0, 100)
+#weight <- rep(0,length(diamonds$carat))
+for(i in 1:100){
+  coeffs<-boot.fn()
+  income.coeff[i] <- coeffs[2]
+  balance.coeff[i] <- coeffs[3]
+}
+cat("The 95% bootstrapped CI for the income coefficient is", quantile(income.coeff, c(0.025, 0.975)))
+cat("\n The 95% bootstrapped CI for the balance coefficient is", quantile(balance.coeff, c(0.025, 0.975)))
+```
+
+# Problem 2
+
+ISLR2 8.4: This question relates to the plots in Figure 8.14.
+
+## Part A
+
+Sketch the tree corresponding to the partition of the predictor space illustrated in the left-hand panel of Figure 8.14. The num- bers inside the boxes indicate the mean of Y within each region.
+
+![Part 2-A](P2A.png)
+
+## Part B
+
+Create a diagram similar to the left-hand panel of Figure 8.14, using the tree illustrated in the right-hand panel of the same figure. You should divide up the predictor space into the correct regions, and indicate the mean for each region.
+
+![Part 2-B](P2B.png)
+
+# Problem 3
+
+ISLR2 8.9: This problem involves the OJ data set which is part of the ISLR2 package.
+```{r p3}
+oj <- ISLR2::OJ
+```
+
+## Part A
+
+Create a training set containing a random sample of 800 observations, and a test set containing the remaining observations.
+```{r p3a}
+n <- 800 # train size
+row_samp <- sample(1:length(oj$Purchase), n, replace = FALSE)
+train <- oj[row_samp,]
+test <- oj[-row_samp,]
+```
+
+## Part B
+
+Fit a tree to the training data, with Purchase as the response and the other variables as predictors. Use the summary() function to produce summary statistics about the tree, and describe the results obtained. What is the training error rate? How many terminal nodes does the tree have?
+
+```{r p3b}
+OJ_tree <- tree(Purchase ~ ., data = train)
+summary(OJ_tree)
+```
+The formula for the tree, although it took in all possible variables as predictors, settled on using four variables: LoyalCH, PriceDiff, ListPriceDiff, and StoreID. There are eight terminal nodes, and the error rate is 16.38%, generated from 131 missclassifications from the sample size of 800 in the training data.
+
+## Part C
+
+Type in the name of the tree object in order to get a detailed text output. Pick one of the terminal nodes, and interpret the information displayed.
+
+```{r p3c}
+OJ_tree
+```
+Looking at Node 11, PriceDiff was split where the variable is greater than 0.31, a set which contains n=51 values. The set has a deviance of 70.68 in values and the response value/"yval" is MM 49.02% of the time and CH 50.98% of the time.
+
+## Part D
+
+Create a plot of the tree, and interpret the results.
+```{r p3d}
+plot(OJ_tree)
+text(OJ_tree)
+```
+
+## Part E
+
+Predict the response on the test data, and produce a confusion matrix comparing the test labels to the predicted test labels. What is the test error rate?
+
+```{r p3e}
+tree_pred <- predict(OJ_tree, test, type = 'class')
+confusionMatrix(tree_pred, test$Purchase)
+```
+
+# Problem 4
+
+For the OJ dataset create a (a) logistic regression model, (b) a Naïve Bayes model, and (c) a decision tree model, using PriceDiff and LoyalCH for each. Next, ensemble the predictions with a simple average. Create a confusion matrix for the ensembled model and compare the accuracies.
+
+## Part A
+
+Logistic regression model
+
+```{r p4a}
+OJ_glm <- glm(data = train, Purchase ~ PriceDiff + LoyalCH, family = binomial)
+test_pred <- predict(OJ_glm,test, type = "response")
+confusionMatrix(as.factor(ifelse(test_pred < 0.5, 'CH', 'MM')), reference = as.factor(test$Purchase))$overall[1]
+```
+
+## Part B
+
+Naïve Bayes model
+
+```{r p4b}
+OJ_nbm <- naiveBayes(data = train, Purchase ~ PriceDiff + LoyalCH)
+test_pred_nB <- predict(OJ_nbm, test)
+confusionMatrix(as.factor(test_pred_nB), as.factor(test$Purchase))$overall[1]
+```
+
+## Part C
+
+Decision tree model
+
+```{r p4c}
+OJ_tree <- tree(Purchase ~ PriceDiff + LoyalCH, data = train)
+tree_pred <- predict(OJ_tree, test, type = 'class')
+confusionMatrix(tree_pred, test$Purchase)$overall[1]
+```
+
+## Part D
+
+Ensembled Modeling
+
+```{r p4d}
+glm_test <- ifelse(test_pred < 0.5, 0, 1)
+nbm_test <- ifelse(test_pred_nB == "CH", 0, 1)
+tree_test <- ifelse(tree_pred == "CH", 0, 1)
+ensem_frac<-(glm_test+nbm_test+tree_test)/3
+ensem_test<-ifelse(ensem_frac < 0.5, 'CH', 'MM')
+confusionMatrix(as.factor(ensem_test), as.factor(test$Purchase))
+```
+
+# Problem 5
+
+Re-do the decision tree in 8.9 with bagging (1,000 bootstrapped samples of the train set). Compare the out-of-bag accuracy to the original decision tree.
+
+```{r p5}
+predicts <- matrix(nrow = length(test$Purchase), ncol = 0)
+for(i in 1:1000){
+  rows <- sample(1:length(train$Purchase), length(train$Purchase), replace = TRUE)
+  samp <- OJ[rows,]
+  OJ_trees <- tree(Purchase ~ ., data = samp)
+  predicts = cbind(predicts, predict(OJ_trees, test)[,1])
+}
+ens <- rowMeans(predicts)
+
+confusionMatrix(as.factor(ifelse(ens < 0.5, 'MM', 'CH')), reference = test$Purchase)
+cat("Difference in Accuracy (bagging-original): ", confusionMatrix(as.factor(ifelse(ens < 0.5, 'MM', 'CH')), reference = test$Purchase)$overall[1] - confusionMatrix(tree_pred, test$Purchase)$overall[1])
+```

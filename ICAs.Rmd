@@ -24,7 +24,6 @@ suppliers <- read.csv("orders/suppliers.csv")
 products <- read.csv("orders/products.csv")
 categories <- read.csv("orders/categories.csv")
 
-
 customer_history <- read.csv("orders/Customer_History.csv")
 order_history <- read.csv("orders/Order_History.csv")
 oh_un <- read.csv("orders/ProductOrderUndated.csv")
@@ -189,7 +188,6 @@ confusionMatrix(data = as.factor(as.integer(2*heart_mod$fitted.values)), referen
 odds <- p/(1-p)
 odds
 ```
-
 ```{r ica8}
 split_pct <- 0.75
 n <- length(OJ$Purchase1)*split_pct # train size
@@ -202,4 +200,219 @@ train_cm <- confusionMatrix(as.factor(as.integer(2*OJ_train_mod$fitted.values)),
 test_cm <- confusionMatrix(as.factor(as.integer(2*test_pred)), reference = as.factor(test$Purchase1))
 train_cm$table
 test_cm$table
+```
+```{r ica11}
+library(class)
+library(caret)
+oj <- ISLR2::OJ
+split_pct <- 0.75
+n <- length(oj$Purchase)*split_pct # train size
+row_samp <- sample(1:length(oj$Purchase), n, replace = FALSE)
+train <- oj[row_samp,c(1,10,13)]
+test <- oj[-row_samp,c(1,10,13)]
+
+###
+train.Y = train$Purchase
+test.Y = test$Purchase
+train_scale = scale(train[,c(2,3)])
+test_scale = scale(test[,c(2,3)])
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=5)
+
+cm<-confusionMatrix(knn_mod, reference = as.factor(test.Y))
+cm$table
+```
+
+```{r ica13}
+library(tree)
+library(caret)
+heart <- read.csv("data/Heart.csv")
+
+split_pct <- 0.75
+n <- length(heart$AHD)*split_pct # train size
+row_samp <- sample(1:length(heart$AHD), n, replace = FALSE)
+train <- heart[row_samp,]
+test <- heart[-row_samp,]
+
+Heart_tree <- tree(as.factor(AHD) ~ RestBP + Age + as.factor(Thal) + as.factor(Sex), data = train)
+
+
+plot(Heart_tree)
+text(Heart_tree)
+tree_pred <- predict(Heart_tree, test, type = 'class')
+
+confusionMatrix(tree_pred, as.factor(test$AHD))
+```
+```{r ica14}
+library(ISLR2)
+library(tree)
+library(randomForest)
+library(caret)
+
+weekly <- ISLR2::Weekly
+
+# Ups<-weekly[weekly["Direction"] == 'Up',]
+# Downs<-weekly[weekly["Direction"] == 'Down',]
+# subset_pct <- 0.8
+# n <- length(Ups$Direction)*subset_pct # train size
+# row_samp <- sample(1:length(Ups$Direction), n, replace = FALSE)
+# subset_ups <- Ups[row_samp,]
+# 
+# Subsetted_weekly <- rbind(Downs, subset_ups)
+
+
+
+split_pct <- 0.75
+n <- length(weekly$Direction)*split_pct # train size
+row_samp <- sample(1:length(weekly$Direction), n, replace = FALSE)
+train <- weekly[row_samp,]
+test <- weekly[-row_samp,]
+
+
+
+
+weekly_tree <- tree(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = train)
+tree_pred <- predict(weekly_tree, test, type = 'class')
+confusionMatrix(tree_pred, test$Direction)
+
+
+predicts <- matrix(nrow = length(test$Direction), ncol = 0)
+for(i in 1:3){
+  rows <- sample(1:length(train$Direction), length(train$Direction), replace = TRUE)
+  samp <- weekly[rows,]
+  weekly_trees <- tree(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = samp)
+  predicts = cbind(predicts, predict(weekly_trees, test)[,1])
+}
+ens <- rowMeans(predicts)
+
+confusionMatrix(as.factor(ifelse(ens < 0.5, 'Up', 'Down')), reference = test$Direction)
+
+
+# weekly_rf <- randomForest(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = train, mtry = 3, importance = TRUE, ntree = 500, maxnodes = 4)
+# rf_predict <- predict(weekly_rf, test)
+# confusionMatrix(rf_predict, test$Direction)
+# barplot(weekly_rf$importance[,3])
+```
+
+
+
+```{r ica15}
+library(ISLR2)
+library(xgboost)
+weekly <- ISLR2::Weekly
+#View(weekly)
+weekly$Direction <- as.integer(ifelse(weekly$Direction == "Down", 1, 0))
+split_pct <- 0.75
+n <- length(weekly$Direction)*split_pct
+row_samp <- sample(1:length(weekly$Direction), n, replace = FALSE)
+train <- weekly[row_samp,]
+test <- weekly[-row_samp,]
+```
+
+```{r ica15p2}
+weekly_xgb <- xgboost(data = data.matrix(train[,c(2:7)]), nrounds = 50, max_depth = 3, eta = 0.1, label = train$Direction, objective = "binary:logistic")
+```
+
+```{r ica15p3}
+pred <- predict(weekly_xgb, data.matrix(test[,c(2:7)]))
+confusionMatrix(as.factor(as.integer(2*pred)), as.factor(test$Direction))
+```
+```{r ica17}
+library(e1071)
+library(caret)
+heart <- read.csv("data/Heart.csv")
+heart$AHD <- as.numeric(as.factor(heart$AHD))
+split_pct <- 0.7
+n <- length(heart$AHD)*split_pct # train size
+row_samp <- sample(1:length(heart$AHD), n, replace = FALSE)
+train <- heart[row_samp,]
+test <- heart[-row_samp,]
+
+svm_mod <- svm(AHD ~ RestBP + MaxHR, data = train, type = 'C-classification', kernel = 'linear', cost = 4, gamma = 1)
+
+```
+
+```{r ica18}
+heart <- read.csv("data/Heart.csv")
+heart <- na.omit(heart)
+heart_sc <- scale(heart[,c(2,3,5:13)])
+heart_km <- kmeans(heart_sc, centers = 8, nstart = 25)
+heart_km$size
+```
+
+
+```{r ica19}
+airline <- read.csv("data/passenger.csv.csv")
+airline_ts <- ts(airline$time, frequency = 12, c(1949,1))
+
+acf(airline_ts)
+pacf(airline_ts)
+
+oilgas <- read.csv("data/oil-gas.csv")
+oil_ts_week <- ts(oilgas$Date, frequency = 52, c(2013,1))
+
+oil_ts_yr <- ts(oilgas$Date, frequency = 12, c(2013,4))
+```
+```{r ica20}
+beer <- read.csv("data/beer.csv")
+beer_ts <- ts(beer$Monthly.beer.production, frequency = 12, start = c(1956, 1))
+
+tsn_beer <- decompose(beer_ts, type = "multiplicative")
+plot(tsn_beer)
+
+###
+library(forecast)
+beer_naive <- naive(beer_ts)
+plot(beer_naive)
+mean(abs(beer_naive$residuals)/beer_ts)
+
+# seasonal naive model
+beer_snaive <- snaive(beer_ts, h = 12)
+plot(beer_snaive)
+mean(abs(beer_snaive$residuals)/beer_ts)
+
+
+
+# simple exponential smoothing
+beer_ses <- ses(beer_ts)
+plot(beer_ses)
+mean(abs(beer_ses$residuals)/beer_ts)
+
+
+# holt model
+beer_holt <- holt(beer_ts)
+plot(beer_holt)
+mean(abs(beer_holt$residuals)/beer_ts)
+
+
+# holt-winters
+beer_hw <- hw(beer_ts, h = 12)
+mean(abs(beer_hw$residuals)/beer_ts)
+plot(beer_hw)
+plot(beer_ts)
+
+```
+
+
+
+
+#
+
+```{r ica21}
+library(forecast)
+
+beer <- read.csv("data/beer.csv")
+beer_ts <- ts(beer$Monthly.beer.production, frequency = 12, start = c(1956, 1))
+plot(beer_ts)
+
+
+acf(beer_ts)
+pacf(beer_ts)
+
+
+beer_dec <- decompose(beer_ts, type = 'multiplicative')
+rand_beer <- ts(beer_dec$random[13:138], start = c(1956,1), frequency = 12)
+aa_beer<-auto.arima(rand_beer)
+
+
+mean(abs(aa_beer$residuals)/beer_ts)
 ```

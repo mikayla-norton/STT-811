@@ -1,0 +1,213 @@
+---
+title: "HW 4"
+author: "Mikayla Norton"
+date: "2023-02-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Problem 1
+ISLR2 4.14 (for all parts do a train-test split like in HW 3 (use the same train-test split for each))
+```{r p1, message=FALSE}
+library("ggplot2")
+library("dplyr")
+library("corrplot")
+library(MASS)
+library(caret)
+library(e1071)
+library(class)
+set.seed(38)
+auto <- ISLR2::Auto
+auto$mpg01 <- auto$mpg
+med <- median(auto$mpg)
+auto$mpg01[auto$mpg01 >  med] <- 1
+auto$mpg01[auto$mpg01 != 1] <- 0
+#cylinders, displacement, horsepower, weight
+split_pct <- 0.6
+n <- length(auto$mpg01)*split_pct # train size
+row_samp <- sample(1:length(auto$mpg01), n, replace = FALSE)
+train <- auto[row_samp,]
+test <- auto[-row_samp,]
+```
+## Part A
+ISLR2 4.14(g): Perform naive Bayes on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01 in (b). What is the test error of the model obtained?
+```{r p1a}
+library(e1071)
+naiveBayesModel <- naiveBayes(mpg01 ~ cylinders + displacement + horsepower + weight, data = train)
+test_pred_nB <- predict(naiveBayesModel, test)
+sum(test$mpg01!=test_pred_nB)/length(test$mpg01)
+```
+
+## Part B
+ISLR2 4.14(d): Perform LDA on the training data in order to predict mpg01 using the variables that seemed most associated with mpg01 in (b). What is the test error of the model obtained?
+```{r p1b}
+auto_train_lda <- lda(data = train, mpg01 ~ cylinders + displacement + horsepower + weight)
+test_pred_lda <- predict(auto_train_lda,test)
+sum(test$mpg01!=test_pred_lda$class)/length(test$mpg01)
+```
+
+## Part C
+ISLR2 4.14(h): Perform KNN on the training data, with several values of K, in order to predict mpg01. Use only the variables that seemed most associated with mpg01 in (b). What test errors do you obtain? Which value of K seems to perform the best on this data set?
+```{r p1c}
+train.Y = train$mpg01
+test.Y = test$mpg01
+test.Y<- as.factor(test.Y)
+train_scale = scale(train[,c(2,3,4,5)])
+test_scale = scale(test[,c(2,3,4,5)])
+
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=3)
+print("Error for k=3")
+sum(test.Y!=knn_mod)/length(knn_mod)
+
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=4)
+print("Error for k=4")
+sum(test.Y!=knn_mod)/length(knn_mod)
+
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=5)
+print("Error for k=5")
+sum(test.Y!=knn_mod)/length(knn_mod)
+
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=6)
+print("Error for k=6")
+sum(test.Y!=knn_mod)/length(knn_mod)
+
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=7)
+print("Error for k=7")
+sum(test.Y!=knn_mod)/length(knn_mod)
+
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=8)
+print("Error for k=8")
+sum(test.Y!=knn_mod)/length(knn_mod)
+```
+
+## Part D
+Re-do the naïve Bayes calculation from first principles (i.e. without any packages, by calculating the class means and standard deviations)
+```{r p1d}
+mpg0_mean_cyl <- mean(filter(auto, mpg01 == 0)$cylinders)
+mpg0_sd_cyl <- sd(filter(auto, mpg01 == 0)$cylinders)
+mpg1_mean_cyl <- mean(filter(auto, mpg01 == 1)$cylinders)
+mpg1_sd_cyl <- sd(filter(auto, mpg01 == 1)$cylinders)
+
+mpg0_mean_disp <- mean(filter(auto, mpg01 == 0)$displacement)
+mpg0_sd_disp <- sd(filter(auto, mpg01 == 0)$displacement)
+mpg1_mean_disp <- mean(filter(auto, mpg01 == 1)$displacement)
+mpg1_sd_disp <- sd(filter(auto, mpg01 == 1)$displacement)
+
+mpg0_mean_hp <- mean(filter(auto, mpg01 == 0)$horsepower)
+mpg0_sd_hp <- sd(filter(auto, mpg01 == 0)$horsepower)
+mpg1_mean_hp <- mean(filter(auto, mpg01 == 1)$horsepower)
+mpg1_sd_hp <- sd(filter(auto, mpg01 == 1)$horsepower)
+
+mpg0_mean_wt <- mean(filter(auto, mpg01 == 0)$weight)
+mpg0_sd_wt <- sd(filter(auto, mpg01 == 0)$weight)
+mpg1_mean_wt <- mean(filter(auto, mpg01 == 1)$weight)
+mpg1_sd_wt <- sd(filter(auto, mpg01 == 1)$weight)
+
+mpg1_frac<- sum(auto$mpg01 == 1)/nrow(auto)
+
+
+Bayes_by_hand <- mpg1_frac * (dnorm(auto$cylinders, mpg1_mean_cyl, mpg1_sd_cyl)*dnorm(auto$displacement, mpg1_mean_disp, mpg1_sd_disp)*dnorm(auto$horsepower, mpg1_mean_hp, mpg1_sd_hp)*dnorm(auto$weight, mpg1_mean_wt, mpg1_sd_wt))/(mpg1_frac * (dnorm(auto$cylinders, mpg1_mean_cyl, mpg1_sd_cyl)*dnorm(auto$displacement, mpg1_mean_disp, mpg1_sd_disp)*dnorm(auto$horsepower, mpg1_mean_hp, mpg1_sd_hp)*dnorm(auto$weight, mpg1_mean_wt, mpg1_sd_wt)) + (1 - mpg1_frac) * (dnorm(auto$cylinders, mpg0_mean_cyl, mpg0_sd_cyl)*dnorm(auto$displacement, mpg0_mean_disp, mpg1_sd_disp)*dnorm(auto$horsepower, mpg0_mean_hp, mpg0_sd_hp)*dnorm(auto$weight, mpg0_mean_wt, mpg0_sd_wt)))
+
+Bayes_by_hand[Bayes_by_hand >  median(Bayes_by_hand)] <- 1
+Bayes_by_hand[Bayes_by_hand != 1] <- 0
+BayesTest<- Bayes_by_hand[-row_samp]
+```
+
+## Part E
+Do a modified naïve Bayes model (2 numerical X’s) which takes into account the class covariances between the X’s.
+
+```{r p1e}
+cov0 <- cov(filter(auto, mpg01==0)[,c(3,4)])
+cov1 <- cov(filter(auto, mpg01==1)[,c(3,4)])
+auto_train_qda <- qda(data = train, mpg01 ~ displacement + horsepower, cov=list(cov1,cov0))
+test_pred_qda <- predict(auto_train_qda,test)
+sum(test$mpg01!=test_pred_qda$class)/length(test$mpg01)
+```
+
+## Part F
+Create confusion matrices and compute the overall accuracy for the 5 models (test dataset). Compare how the models did.
+```{r p1f}
+print("Naive Bayes Confusion Matrix")
+test_cm_naiveBayes <- confusionMatrix(as.factor(test_pred_nB), as.factor(test$mpg01))
+test_cm_naiveBayes$table
+print("LDA Confusion Matrix")
+test_cm_lda <- confusionMatrix(as.factor(test_pred_lda$class), reference = as.factor(test$mpg01))
+test_cm_lda$table
+print("KNN, k=4, Confusion Matrix")
+knn_mod<-knn(train = train_scale, test = test_scale, cl = train.Y, k=4)
+cm_knn<-confusionMatrix(knn_mod, reference = as.factor(test.Y))
+cm_knn$table
+print("No-package Naive Bayes Confusion Matrix")
+byhand_Bayes_cm<-confusionMatrix(as.factor(BayesTest), reference = (test.Y))
+byhand_Bayes_cm$table
+print("Modified Naive Bayes Confusion Matrix")
+test_cm_qda <- confusionMatrix(as.factor(test_pred_qda$class), as.factor(test$mpg01))
+test_cm_qda$table
+```
+
+# Problem 2
+For the customer churn dataset, consider the fields Age, Total_Purchase, Account_Manager, Years, and Num_Sites as possible X variables. Note that Account_Manager is a binary categorical variable. After doing a train/test split:
+```{r p2}
+churn <- read.csv("data/customer_churn.csv")
+split_pct <- 0.75
+n <- length(churn$Churn)*split_pct # train size
+row_samp <- sample(1:length(churn$Churn), n, replace = FALSE)
+train <- churn[row_samp,]
+test <- churn[-row_samp,]
+```
+
+
+## Part A 
+Create a naïve Bayes model to predict churn.
+```{r p2a}
+naiveBayesModel <- naiveBayes(train$Churn ~ Age+Total_Purchase+Years+Num_Sites+as.factor(Account_Manager), data = train)
+test_pred <- predict(naiveBayesModel,test)
+```
+
+## Part B
+Create a KNN neighbors model to predict churn. Vary K from 4 to 10 and find out which K has the highest accuracy.
+```{r p2b}
+train.Y = train$Churn
+test.Y = test$Churn
+train_scale = scale(train[,c(2,3,4,5,6)])
+test_scale = scale(test[,c(2,3,4,5,6)])
+knn4<-knn(train = train_scale, test = test_scale, cl = train.Y, k=4)
+knn5<-knn(train = train_scale, test = test_scale, cl = train.Y, k=5)
+knn6<-knn(train = train_scale, test = test_scale, cl = train.Y, k=6)
+knn7<-knn(train = train_scale, test = test_scale, cl = train.Y, k=7)
+knn8<-knn(train = train_scale, test = test_scale, cl = train.Y, k=8)
+knn9<-knn(train = train_scale, test = test_scale, cl = train.Y, k=9)
+knn10<-knn(train = train_scale, test = test_scale, cl = train.Y, k=10)
+```
+
+## Part C
+Create the confusion matrices for the test dataset for each of these and compare the models’ performance.
+```{r p2c}
+cm4<-confusionMatrix(knn4, reference = as.factor(test.Y))
+cm5<-confusionMatrix(knn5, reference = as.factor(test.Y))
+cm6<-confusionMatrix(knn6, reference = as.factor(test.Y))
+cm7<-confusionMatrix(knn7, reference = as.factor(test.Y))
+cm8<-confusionMatrix(knn8, reference = as.factor(test.Y))
+cm9<-confusionMatrix(knn9, reference = as.factor(test.Y))
+cm10<-confusionMatrix(knn10, reference = as.factor(test.Y))
+print("KNN, k=10")
+cm10$table
+print("KNN, k=9")
+cm9$table
+print("KNN, k=8")
+cm8$table
+print("KNN, k=7")
+cm7$table
+print("KNN, k=6")
+cm6$table
+print("KNN, k=5")
+cm5$table
+print("KNN, k=4")
+cm4$table
+print("NaiveBayes Model")
+test_cm <- confusionMatrix(as.factor(test_pred), reference = as.factor(test$Churn))
+test_cm$table
+```

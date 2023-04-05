@@ -1,0 +1,583 @@
+---
+title: "HW 6"
+author: "Mikayla Norton"
+date: "2023-03-23"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_depth: 2
+    toc_float: true
+    df_print: paged
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(class)
+library(ISLR2)
+library(xgboost)
+library(ddpcr)
+library(ggplot2)
+library(GGally)
+library(e1071)
+library(forecast)
+library(dplyr)
+```
+
+# Problem 1
+ISLR 8.11 (using xgboost): This question uses the Caravan data set.
+
+## Part A
+Create a training set consisting of the first 1,000 observations, and a test set consisting of the remaining observations.
+
+```{r p1a}
+caravan <- ISLR2::Caravan
+caravan <- na.omit(caravan)
+#train/test split
+n <- 1000 # train size
+row_samp <- sample(1:length(caravan$Purchase), n, replace = FALSE)
+train <- caravan[row_samp,]
+test <- caravan[-row_samp,]
+```
+
+## Part B
+Fit a boosting model to the training set with Purchase as the response and the other variables as predictors. Use 1,000 trees, and a shrinkage value of 0.01. Which predictors appear to be the most important?
+
+```{r p1b}
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 1000, max_depth = 2, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)
+```
+
+## Part C
+Use the boosting model to predict the response on the test data. Predict that a person will make a purchase if the estimated probability of purchase is greater than 20 %. Form a confusion matrix. What fraction of the people predicted to make a purchase do in fact make one? How does this compare with the results obtained from applying KNN or logistic regression to this data set?
+
+```{r p1c}
+pred <- predict(caravan_xgb, data.matrix(test[,-86]))
+
+pred<- as.factor(ifelse(pred > .2, "Yes", "No"))
+
+confusionMatrix(pred, test$Purchase)$table
+cat("Fraction of the people predicted to make a purchase that do make a purchase: ", confusionMatrix(pred, test$Purchase)$table[4]/(confusionMatrix(pred, test$Purchase)$table[2]+ confusionMatrix(pred, test$Purchase)$table[4]), "\n\n")
+
+### KNN
+caravan_knn <- scale(select_if(caravan[,-86], is.numeric))
+
+train_knn <- caravan_knn[row_samp,]
+test_knn <- caravan_knn[-row_samp,]
+train.Y <- caravan[row_samp,]$Purchase
+test.Y <- caravan[-row_samp,]$Purchase
+
+knn_mod <- knn(train_knn, test_knn, cl = train.Y , k = 3)
+confusionMatrix(knn_mod , reference = as.factor(test.Y))$table
+
+cat("\nFraction of the people predicted to make a purchase that do make a purchase: ", (confusionMatrix(knn_mod , reference = as.factor(test.Y))$table[4])/(confusionMatrix(knn_mod , reference = as.factor(test.Y))$table[2]+ confusionMatrix(knn_mod , reference = as.factor(test.Y))$table[4]))
+```
+
+## Part D
+Perform a grid search for the optimal hyperparameters in the model. Let nrounds go from 50 to 550 in steps of 100, maxdepth from 1 to 2, and eta be 0.01, .1, and .2.
+
+```{r p1d}
+print("nrounds = 50")
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 50, max_depth = 2, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 50, max_depth = 1, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 50, max_depth = 2, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 50, max_depth = 1, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 50, max_depth = 2, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 50, max_depth = 1, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+
+print("nrounds = 150")
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 150, max_depth = 2, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 150, max_depth = 1, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 150, max_depth = 2, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 150, max_depth = 1, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 150, max_depth = 2, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 150, max_depth = 1, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+
+print("nrounds = 250")
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 250, max_depth = 2, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 250, max_depth = 1, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 250, max_depth = 2, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 250, max_depth = 1, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 250, max_depth = 2, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 250, max_depth = 1, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+
+
+print("nrounds = 350")
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 350, max_depth = 2, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 350, max_depth = 1, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 350, max_depth = 2, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 350, max_depth = 1, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 350, max_depth = 2, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 350, max_depth = 1, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+
+print("nrounds = 450")
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 450, max_depth = 2, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 450, max_depth = 1, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 450, max_depth = 2, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 450, max_depth = 1, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 450, max_depth = 2, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 450, max_depth = 1, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+
+
+print("nrounds = 550")
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 550, max_depth = 2, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 550, max_depth = 1, eta = 0.01, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 550, max_depth = 2, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 550, max_depth = 1, eta = 0.1, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 550, max_depth = 2, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+quiet(caravan_xgb <- xgboost(data = data.matrix(train[,-86]), nrounds = 550, max_depth = 1, eta = 0.2, label = as.integer(train$Purchase)-1, objective = "binary:logistic"), all=TRUE)
+cat("\nMax Depth: ", as.integer(caravan_xgb$params[1]), ", eta: ", as.integer(caravan_xgb$params[2]), "\n")
+xgb.importance(colnames(train[,-86]), model = caravan_xgb)[1:5]
+
+```
+
+# Problem 2
+ISLR2 9.7: In this problem, you will use support vector approaches in order to predict whether a given car gets high or low gas mileage based on the Auto data set.
+
+## Part A
+Create a binary variable that takes on a 1 for cars with gas mileage above the median, and a 0 for cars with gas mileage below the median.
+
+```{r p2a}
+auto <- ISLR2::Auto
+auto$mpg <- as.integer(ifelse(auto$mpg > median(auto$mpg), 1, 0))
+```
+
+## Part B
+(with a 80/20 train/test split) Fit a support vector classifier to the data with various values of cost, in order to predict whether a car gets high or low gas mileage. Report the cross-validation errors associated with different values of this parameter. Comment on your results. Note you will need to fit the classifier without the gas mileage variable to produce sensible results.
+
+```{r p2b}
+split_pct <- 0.8
+n <- length(auto$mpg)*split_pct # train size
+row_samp <- sample(1:length(auto$mpg), n, replace = FALSE)
+train <- auto[row_samp,]
+test <- auto[-row_samp,]
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'linear', cost = 1, gamma = 0.5)
+cat("Cost: ", svm_mod$cost)
+pred <- predict(svm_mod, test)
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$table
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1]
+
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'linear', cost = 0.01, gamma = 0.5)
+cat("\nCost: ", svm_mod$cost)
+pred <- predict(svm_mod, test)
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$table
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1]
+
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'linear', cost = 10, gamma = 0.5)
+cat("\nCost: ", svm_mod$cost)
+pred <- predict(svm_mod, test)
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$table
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1]
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'linear', cost = 100, gamma = 0.5)
+cat("\nCost: ", svm_mod$cost)
+pred <- predict(svm_mod, test)
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$table
+confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1]
+```
+Cost Parameter did not impact results significantly between the range of 0.01 to 100.
+
+## Part C
+Now repeat (b), this time using SVMs with radial and polynomial basis kernels, with different values of gamma and degree and cost. Comment on your results.
+
+```{r p2c}
+print("Radial SVMs with variable parameters")
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 1, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 0.01, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 100, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 1, gamma = 5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 1, gamma = 0.05)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 1, gamma = 50)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 1, degree=3, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 1,degree=5, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'radial', cost = 1,degree=8, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1], "\n\n\n")
+
+
+
+print("Polynomial SVMs with variable parameters")
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 1, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 0.01, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 100, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 1, gamma = 5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 1, gamma = 0.05)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 1, gamma = 50)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 1, degree=3, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 1,degree=5, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+
+svm_mod <- svm(mpg ~ cylinders + displacement + horsepower + weight, data = train, type = 'C-classification', kernel = 'polynomial', cost = 1,degree=8, gamma = 0.5)
+pred <- predict(svm_mod, test)
+cat("\nCost: ", svm_mod$cost, ", Gamma: ", svm_mod$gamma, ", Degree: ", svm_mod$degree, ", Accuracy: ", confusionMatrix(as.factor(pred), as.factor(test$mpg))$overall[1])
+```
+In radial iterations, it appears that modification of gamma and cost impacted the data, especially when values were made quite large, but degree only applies to polynomial. For polynomial iterations, higher degrees had lower accuracy. The smallest gamma value had the lowest accuracy, and the same was true for cost.
+
+
+# Problem 3
+Take a look at the nndb dataset available in the sample data. We will focus on the columns for protein, fat, sugar, carb, and fiber for this assignment. (Remember to standardize the data)
+
+## Part A
+Perform k-means clustering for these fields with 4 and 8 clusters using the algorithm from scratch (not using the kmeans command). Repeat a few times; do you get the same cluster centers?
+
+```{r p3a}
+nndb <- read.csv("data/nndb_flat.csv")
+numclus <- 4
+maxiter <- 10
+nndb_sc <- scale(nndb[,-1:-7])
+n <- length(nndb$Protein_g)
+row_samp <- sample(1:n, numclus, replace = FALSE)
+clus_loc <- nndb_sc[row_samp,]
+clus_dist <- matrix(rep(0, n*numclus), nrow = n, ncol = numclus)
+clus_pick <- rep(0, n)
+clus_pick_old <- rep(0, n)
+# for(k in 1:maxiter){
+#   for(i in 1:n){
+#     for(j in 1:numclus)
+#     {
+#       clus_dist[i,j] <- sqrt(sum((nndb_sc[i,-1:-7] - clus_loc[j,-1:-7])^2))
+#     }
+#     clus_pick[i] = which.min(clus_dist[i,])
+#   }
+#   clus_loc_new <- aggregate(nndb_sc[,-1:-7], list(clus_pick), FUN=mean) 
+#   clus_loc <-clus_loc_new[2:5]
+#     if(clus_pick == clus_pick_old){
+#       break
+#       }
+#     clus_pick = clus_pick_old
+# }
+nndb_clus <- cbind(clus_pick, nndb)
+
+
+
+numclus <- 8
+maxiter <- 10
+nndb_sc <- scale(nndb[,-1:-7])
+n <- length(nndb$Protein_g)
+row_samp <- sample(1:n, numclus, replace = FALSE)
+clus_loc <- nndb_sc[row_samp,]
+clus_dist <- matrix(rep(0, n*numclus), nrow = n, ncol = numclus)
+clus_pick <- rep(0, n)
+clus_pick_old <- rep(0, n)
+# for(k in 1:maxiter){
+#   for(i in 1:n){
+#     for(j in 1:numclus)
+#     {
+#       clus_dist[i,j] <- sqrt(sum((nndb_sc[i,-1:-7] - clus_loc[j,-1:-7])^2))
+#     }
+#     clus_pick[i] = which.min(clus_dist[i,])
+#   }
+#   clus_loc_new <- aggregate(nndb_sc[,-1:-7], list(clus_pick), FUN=mean) 
+#   clus_loc <-clus_loc_new[2:5]
+#     if(clus_pick == clus_pick_old){
+#       break
+#       }
+#     clus_pick = clus_pick_old
+# }
+nndb_clus <- cbind(clus_pick, nndb)
+```
+
+## Part B
+Next, use k-means clustering with the kmeans command. Try from 2 to 10 clusters. For how many of these cluster numbers do you get the same centers after repeating kmeans (for each number do 3 iterations of kmeans)?
+
+```{r p3b}
+data.frame(rbind(kmeans(nndb_sc, centers = 2, nstart = 25)$size,kmeans(nndb_sc, centers = 2, nstart = 25)$size,kmeans(nndb_sc, centers = 2, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 3, nstart = 25)$size,kmeans(nndb_sc, centers = 3, nstart = 25)$size,kmeans(nndb_sc, centers = 3, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 4, nstart = 25)$size,kmeans(nndb_sc, centers = 4, nstart = 25)$size,kmeans(nndb_sc, centers = 4, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 5, nstart = 25)$size,kmeans(nndb_sc, centers = 5, nstart = 25)$size,kmeans(nndb_sc, centers = 5, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 6, nstart = 25)$size,kmeans(nndb_sc, centers = 6, nstart = 25)$size,kmeans(nndb_sc, centers = 6, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 7, nstart = 25)$size,kmeans(nndb_sc, centers = 7, nstart = 25)$size,kmeans(nndb_sc, centers = 7, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 8, nstart = 25)$size,kmeans(nndb_sc, centers = 8, nstart = 25)$size,kmeans(nndb_sc, centers = 8, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 9, nstart = 25)$size,kmeans(nndb_sc, centers = 9, nstart = 25)$size,kmeans(nndb_sc, centers = 9, nstart = 25)$size))
+
+data.frame(rbind(kmeans(nndb_sc, centers = 10, nstart = 25)$size,kmeans(nndb_sc, centers = 10, nstart = 25)$size,kmeans(nndb_sc, centers = 10, nstart = 25)$size))
+```
+
+**Consistent clusters: 2 and 4, and sometimes 6 (was consistent once, but not always when re-ran)**
+
+
+## Part C
+Take the highest number of clusters for which kmeans gives a consistent response (same centers after repeating). Look at the food names for the data in each cluster. Can you give a verbal description of each cluster, based on the names?
+
+```{r p3c}
+nndb_km <- data.frame()
+nndb_km<-cbind(nndb, kmeans(scale(nndb_sc), centers = 4, nstart = 25)$cluster)
+colnames(nndb_km)[46] ="cluster"
+print("Cluster 1")
+tab1 <- table(nndb_km[nndb_km$cluster==1,]$FoodGroup)
+tab1[order(tab1, decreasing=TRUE)]
+print("Cluster 2")
+tab2 <- table(nndb_km[nndb_km$cluster==2,]$FoodGroup)
+tab2[order(tab2, decreasing=TRUE)]
+print("Cluster 3")
+tab3 <- table(nndb_km[nndb_km$cluster==3,]$FoodGroup)
+tab3[order(tab3, decreasing=TRUE)]
+print("Cluster 4")
+tab4 <- table(nndb_km[nndb_km$cluster==4,]$FoodGroup)
+tab4[order(tab4, decreasing=TRUE)]
+```
+
+## Part D
+Perform a linear regression, predicting calories based on these 5 inputs for the entire dataset. Then do separate regression models for each of the clusters in (c), keeping only significant terms for each. How do the models compare (accuracy, adjusted R^2, etc.)?
+
+```{r p3d}
+nndb_lm <- lm(data = nndb[,c(-1:-7, -31:-45)], Energy_kcal ~Protein_g+Fat_g+ Carb_g+Sugar_g+Fiber_g)
+summary(nndb_lm)
+
+nndb_lm1 <- lm(data = nndb_km[nndb_km$cluster==1,], Energy_kcal ~Protein_g+Fat_g+ Carb_g+Fiber_g)
+summary(nndb_lm1)
+
+
+nndb_lm2 <- lm(data = nndb_km[nndb_km$cluster==2,], Energy_kcal ~Protein_g+Fat_g+ Carb_g+Sugar_g+Fiber_g)
+summary(nndb_lm2)
+
+
+nndb_lm3 <- lm(data = nndb_km[nndb_km$cluster==3,], Energy_kcal ~Protein_g+Fat_g+ Carb_g)
+summary(nndb_lm3)
+
+
+nndb_lm4 <- lm(data = nndb_km[nndb_km$cluster==4,], Energy_kcal ~Protein_g+Fat_g+ Carb_g+Sugar_g+Fiber_g)
+summary(nndb_lm4)
+```
+
+# Problem 4
+For the gas data in the oil gas dataset
+
+## Part A
+Perform trend seasonality decomposition, comparing additive and multiplicative. Which one look better?
+
+```{r p4a}
+gas <- read.csv("data/oil-gas.csv")[,-2]
+gas_ts <- ts(gas$Gas, frequency = 12, c(2013,1), c(2022, 4))
+
+tsn_gas_m <- decompose(gas_ts, type = "multiplicative")
+plot(tsn_gas_m)
+
+tsn_gas_a <- decompose(gas_ts, type = "additive")
+plot(tsn_gas_a)
+```
+
+## Part B
+Create forecasts for the gas data, with
+
+i. naïve
+ii. seasonal naïve
+iii. simple exponential smooth
+iv. Holt
+v. Holt-winters
+
+```{r p4bi}
+gas_naive <- naive(gas_ts)
+plot(gas_naive)
+```
+
+```{r p4bii}
+gas_snaive <- snaive(gas_ts, h = 52)
+plot(gas_snaive)
+```
+
+```{r p4biii}
+gas_ses <- ses(gas_ts)
+plot(gas_ses)
+```
+
+```{r p4biv}
+gas_holt <- holt(gas_ts)
+plot(gas_holt)
+```
+
+```{r p4bv}
+gas_hw <- hw(gas_ts)
+plot(gas_hw)
+```
+
+## Part C
+Calculate the MAPE’s for each of the models in (b). Which fits the best?
+
+```{r p4c}
+mean(na.omit(abs(gas_naive$residuals)/gas_ts))
+mean(na.omit(abs(gas_snaive$residuals)/gas_ts))
+mean(abs(gas_ses$residuals)/gas_ts)
+mean(abs(gas_holt$residuals)/gas_ts)
+mean(abs(gas_hw$residuals)/gas_ts)
+
+```
+Holt has the lowest MAPE.
+
+
+## Part D
+Create a plot of the best forecast along with the fitted values to show the fit.
+
+```{r p4d}
+plot(gas_holt$fitted)
+```
+
